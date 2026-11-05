@@ -30,12 +30,8 @@ export function UploadModal({
   const [resourceType, setResourceType] = useState<ResourceType>('Notes');
   const [academicYear, setAcademicYear] = useState<string>('Fall 2024-25 FAT');
   const [slot, setSlot] = useState<string>('A1 + TA1');
-  const [uploaderName, setUploaderName] = useState<string>('Rohan Sharma');
-  const [uploaderRegNo, setUploaderRegNo] = useState<string>('22BCE1042');
-  const [uploaderEmail, setUploaderEmail] = useState<string>('rohan.sharma2022@vitstudent.ac.in');
   const [selectedFile, setSelectedFile] = useState<{
-    name: string;
-    size: string;
+    file: File;
     format: FileFormat;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,15 +60,10 @@ export function UploadModal({
     else if (ext === 'docx' || ext === 'doc') format = 'docx';
     else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) format = 'image';
 
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
-    setSelectedFile({
-      name: file.name,
-      size: sizeMB,
-      format,
-    });
+    setSelectedFile({ file, format });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -86,19 +77,57 @@ export function UploadModal({
       return;
     }
 
-    // Email domain check (PRD FR-16)
-    if (!uploaderEmail.endsWith('@vitstudent.ac.in') && !uploaderEmail.endsWith('@vit.ac.in')) {
-      setError('Upload is restricted to verified VIT accounts (@vitstudent.ac.in or @vit.ac.in).');
-      return;
-    }
-
     setIsSubmitting(true);
-
-    setTimeout(() => {
+    try {
       const subject = subjects.find((s) => s.id === selectedSubjectId) || subjects[0];
+      if (!subject) {
+        setError('Select a subject before uploading.');
+        return;
+      }
+
+      const uploadFile = selectedFile.file;
+      const allocationResponse = await fetch('/api/upload/presigned-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: uploadFile.name,
+          contentType: uploadFile.type,
+          size: uploadFile.size,
+        }),
+      });
+      const allocation = await allocationResponse.json();
+      if (!allocationResponse.ok) {
+        throw new Error(allocation.error || 'Unable to allocate the upload.');
+      }
+
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      const uploadResponse = await fetch(allocation.uploadUrl, {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadResult = await uploadResponse.json();
+      if (!uploadResponse.ok) {
+        throw new Error(uploadResult.error || 'File upload failed.');
+      }
+
+      const completionResponse = await fetch('/api/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          objectKey: allocation.objectKey,
+          originalFilename: uploadFile.name,
+          contentType: uploadFile.type,
+          expectedSize: uploadFile.size,
+        }),
+      });
+      const completion = await completionResponse.json();
+      if (!completionResponse.ok) {
+        throw new Error(completion.error || 'Unable to complete the upload.');
+      }
 
       const newResource: Resource = {
-        id: `res-upload-${Date.now()}`,
+        id: completion.id,
         title,
         description,
         subjectId: subject.id,
@@ -108,22 +137,25 @@ export function UploadModal({
         resourceType,
         academicYear: resourceType === 'PYQ' ? academicYear : undefined,
         slot: resourceType === 'PYQ' ? slot : undefined,
-        uploaderName,
-        uploaderRegNo,
-        uploaderEmail,
-        createdAt: new Date().toISOString(),
+        uploaderName: 'Authenticated contributor',
+        uploaderRegNo: '',
+        uploaderEmail: '',
+        createdAt: completion.createdAt,
         fileFormat: selectedFile.format,
-        fileSize: selectedFile.size,
-        fileUrl: `/uploads/${selectedFile.name}`,
+        fileSize: `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB`,
+        fileUrl: completion.fileUrl,
         downloadCount: 0,
-        status: 'PENDING', // PRD FR-9: Submissions enter Pending state
+        status: completion.status,
         isVerified: false,
       };
 
       onUploadSuccess(newResource);
-      setIsSubmitting(false);
       onClose();
-    }, 600);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -168,14 +200,14 @@ export function UploadModal({
               <input
                 type="file"
                 onChange={handleFileChange}
-                accept=".pdf,.ppt,.pptx,.doc,.docx,.png,.jpg,.jpeg"
+                accept=".pdf,.ppt,.pptx,.doc,.docx,.png,.jpg,.jpeg,.webp"
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
               {selectedFile ? (
                 <div className="flex items-center justify-center gap-3 text-emerald-700 font-semibold">
                   <CheckBadgeIcon className="w-5 h-5 text-emerald-600" />
                   <span>
-                    {selectedFile.name} ({selectedFile.size})
+                    {selectedFile.file.name} ({(selectedFile.file.size / (1024 * 1024)).toFixed(1)} MB)
                   </span>
                   <span className="text-xs text-blue-600 underline cursor-pointer">Change</span>
                 </div>
@@ -295,37 +327,10 @@ export function UploadModal({
             />
           </div>
 
-          {/* Contributor Metadata (Auth simulation) */}
+          {/* Uploader identity is supplied by the authenticated server session. */}
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-800">Contributor Credentials</span>
-              <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-mono">
-                VIT Verified Account
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                type="text"
-                value={uploaderName}
-                onChange={(e) => setUploaderName(e.target.value)}
-                placeholder="Full Name"
-                className="rounded-lg border border-slate-200 p-2 text-xs bg-white"
-              />
-              <input
-                type="text"
-                value={uploaderRegNo}
-                onChange={(e) => setUploaderRegNo(e.target.value)}
-                placeholder="Reg No (e.g. 22BCE1042)"
-                className="rounded-lg border border-slate-200 p-2 text-xs bg-white font-mono uppercase"
-              />
-              <input
-                type="email"
-                value={uploaderEmail}
-                onChange={(e) => setUploaderEmail(e.target.value)}
-                placeholder="@vitstudent.ac.in"
-                className="rounded-lg border border-slate-200 p-2 text-xs bg-white"
-              />
-            </div>
+            <span className="font-bold text-slate-800">Contributor identity</span>
+            <p className="text-slate-500">Your verified account is associated with this upload automatically.</p>
           </div>
 
           {/* Action buttons */}

@@ -23,6 +23,7 @@ import { ContributorDashboard } from '@/components/ContributorDashboard';
 import { AdminCatalog } from '@/components/AdminCatalog';
 import { ReportModal } from '@/components/ReportModal';
 import { PYQAnalysisPreview } from '@/components/PYQAnalysisPreview';
+import { downloadResourceFile } from '@/lib/download-resource';
 
 export default function Home() {
   // Roles and Navigation
@@ -303,11 +304,9 @@ export default function Home() {
         resource={previewResource}
         onClose={() => setPreviewResource(null)}
         onDownload={(res) => {
-          if (res.fileUrl.startsWith('http')) {
-            window.open(res.fileUrl, '_blank');
-          } else {
-            alert(`Downloading "${res.title}"`);
-          }
+          void downloadResourceFile(res.fileUrl, res.title).catch((error: unknown) => {
+            alert(error instanceof Error ? error.message : 'File download failed.');
+          });
         }}
       />
 
