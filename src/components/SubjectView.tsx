@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Subject, Resource, ResourceType } from '@/types';
+import { downloadResourceFile } from '@/lib/download-resource';
 import {
   FileTextIcon,
   CheckBadgeIcon,
@@ -348,11 +349,9 @@ export function SubjectView({
                     {/* Download Button */}
                     <button
                       onClick={() => {
-                        if (res.fileUrl.startsWith('http')) {
-                          window.open(res.fileUrl, '_blank');
-                        } else {
-                          alert(`Downloading "${res.title}" (${res.fileSize})`);
-                        }
+                        void downloadResourceFile(res.fileUrl, res.title).catch((error: unknown) => {
+                          alert(error instanceof Error ? error.message : 'File download failed.');
+                        });
                       }}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200"
                     >
