@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSession, signIn } from 'next-auth/react';
 import { Subject, ResourceType, Resource, FileFormat } from '@/types';
 import { CloseIcon, UploadCloudIcon, CheckBadgeIcon } from './icons';
 
@@ -21,6 +22,7 @@ export function UploadModal({
   initialModuleNumber,
   onUploadSuccess,
 }: UploadModalProps) {
+  const { data: session } = useSession();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
@@ -137,9 +139,9 @@ export function UploadModal({
         resourceType,
         academicYear: resourceType === 'PYQ' ? academicYear : undefined,
         slot: resourceType === 'PYQ' ? slot : undefined,
-        uploaderName: 'Authenticated contributor',
-        uploaderRegNo: '',
-        uploaderEmail: '',
+        uploaderName: session?.user?.name || 'Authenticated contributor',
+        uploaderRegNo: session?.user?.regNo || '',
+        uploaderEmail: session?.user?.email || '',
         createdAt: completion.createdAt,
         fileFormat: selectedFile.format,
         fileSize: `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB`,
@@ -327,11 +329,47 @@ export function UploadModal({
             />
           </div>
 
-          {/* Uploader identity is supplied by the authenticated server session. */}
-          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-            <span className="font-bold text-slate-800">Contributor identity</span>
-            <p className="text-slate-500">Your verified account is associated with this upload automatically.</p>
-          </div>
+          {/* Uploader identity is supplied by the authenticated server session */}
+          {session?.user ? (
+            <div className="p-3.5 bg-blue-50/70 rounded-2xl border border-blue-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-blue-900">Verified Contributor Identity</span>
+                <span className="rounded bg-blue-200 text-blue-900 px-1.5 py-0.5 text-[10px] font-bold uppercase">
+                  {session.user.role || 'Contributor'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-slate-800">{session.user.name}</span>
+                <span className="text-slate-400">&bull;</span>
+                <span className="font-mono text-slate-600">{session.user.email}</span>
+                {session.user.regNo && (
+                  <>
+                    <span className="text-slate-400">&bull;</span>
+                    <span className="font-mono font-semibold text-blue-700">{session.user.regNo}</span>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Your verified VIT institutional account will be associated with this contribution.
+              </p>
+            </div>
+          ) : (
+            <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-between gap-3">
+              <div>
+                <span className="font-bold text-amber-900 block">Sign In Required</span>
+                <p className="text-[11px] text-amber-700">
+                  Please sign in with your VIT Google account to upload and verify resources.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => signIn('google')}
+                className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-700 transition-colors"
+              >
+                Sign In
+              </button>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-200">
@@ -344,7 +382,7 @@ export function UploadModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !session?.user}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-all"
             >
               {isSubmitting ? 'Uploading...' : 'Submit to Moderation Queue'}

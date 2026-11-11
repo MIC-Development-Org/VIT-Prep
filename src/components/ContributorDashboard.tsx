@@ -51,6 +51,9 @@ export function ContributorDashboard({
             <p className="text-xs sm:text-sm text-emerald-200">
               Track real-time review status, read moderator feedback, and monitor your verified contributions.
             </p>
+            <p className="text-xs text-emerald-300 font-mono">
+              Account: <span className="font-semibold text-white">{currentUploaderEmail}</span>
+            </p>
           </div>
 
           <button

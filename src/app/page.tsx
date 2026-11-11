@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   UserRole,
   Subject,
@@ -26,8 +27,11 @@ import { PYQAnalysisPreview } from '@/components/PYQAnalysisPreview';
 import { downloadResourceFile } from '@/lib/download-resource';
 
 export default function Home() {
-  // Roles and Navigation
-  const [currentRole, setCurrentRole] = useState<UserRole>('student');
+  const { data: session } = useSession();
+
+  // Roles and Navigation (defaults to session user role if authenticated, otherwise student)
+  const [selectedRoleOverride, setSelectedRoleOverride] = useState<UserRole | null>(null);
+  const currentRole: UserRole = selectedRoleOverride ?? session?.user?.role ?? 'student';
   const [activeTab, setActiveTab] = useState<'browse' | 'my-uploads' | 'moderator' | 'admin'>('browse');
 
   // Core Data State
@@ -58,16 +62,17 @@ export default function Home() {
   const [previewResource, setPreviewResource] = useState<Resource | null>(null);
   const [reportingResource, setReportingResource] = useState<Resource | null>(null);
 
-  // Contributor email simulation
-  const contributorEmail = 'rohan.sharma2022@vitstudent.ac.in';
+  // Authenticated Contributor email (from session or mock fallback)
+  const contributorEmail = session?.user?.email || 'rohan.sharma2022@vitstudent.ac.in';
 
   // Computed counts
   const pendingReviewCount = resources.filter((r) => r.status === 'PENDING').length;
   const myUploadsCount = resources.filter(
     (r) =>
       r.uploaderEmail === contributorEmail ||
-      r.uploaderRegNo === '22BCE1042' ||
-      r.uploaderName.includes('Rohan')
+      (session?.user?.email && r.uploaderEmail === session.user.email) ||
+      (session?.user?.regNo && r.uploaderRegNo === session.user.regNo) ||
+      (!session?.user && (r.uploaderRegNo === '22BCE1042' || r.uploaderName.includes('Rohan')))
   ).length;
 
   // Handlers for Upload
@@ -200,7 +205,7 @@ export default function Home() {
       {/* Top Navbar with Role Switcher */}
       <Navbar
         currentRole={currentRole}
-        onRoleChange={setCurrentRole}
+        onRoleChange={setSelectedRoleOverride}
         activeTab={activeTab}
         onTabChange={(tab) => {
           setActiveTab(tab);
@@ -328,24 +333,28 @@ export default function Home() {
             <span>AY 2026&ndash;27</span>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => {
-                setCurrentRole('moderator');
-                setActiveTab('moderator');
-              }}
-              className="hover:text-blue-600 transition-colors"
-            >
-              Moderator Portal
-            </button>
-            <button
-              onClick={() => {
-                setCurrentRole('admin');
-                setActiveTab('admin');
-              }}
-              className="hover:text-blue-600 transition-colors"
-            >
-              Admin Catalog
-            </button>
+            {session?.user && (
+              <button
+                onClick={() => {
+                  setSelectedRoleOverride('moderator');
+                  setActiveTab('moderator');
+                }}
+                className="hover:text-blue-600 transition-colors"
+              >
+                Moderator Portal
+              </button>
+            )}
+            {session?.user && (
+              <button
+                onClick={() => {
+                  setSelectedRoleOverride('admin');
+                  setActiveTab('admin');
+                }}
+                className="hover:text-blue-600 transition-colors"
+              >
+                Admin Catalog
+              </button>
+            )}
             <span>WCAG 2.1 AA Compliant</span>
           </div>
         </div>
